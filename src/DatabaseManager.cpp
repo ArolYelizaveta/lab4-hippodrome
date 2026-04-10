@@ -3,19 +3,22 @@
 #include <sstream>
 #include <utility>
 
-DatabaseManager::DatabaseManager(std::string  path) : db(nullptr), db_path(std::move(path)) {}
+DatabaseManager::DatabaseManager(std::string path) : db(nullptr), db_path(std::move(path)) {}
 
 DatabaseManager::~DatabaseManager() {
     disconnect();
 }
 
-bool DatabaseManager::connect() {
+bool DatabaseManager::ensureConnection() {
+    if (db) {
+        return true;
+    }
     const int rc = sqlite3_open(db_path.c_str(), &db);
     if (rc) {
         std::cerr << "Ошибка открытия БД: " << sqlite3_errmsg(db) << std::endl;
+        db = nullptr;
         return false;
     }
-
     return true;
 }
 
@@ -26,10 +29,6 @@ void DatabaseManager::disconnect() {
     }
 }
 
-bool DatabaseManager::isConnected() const {
-    return db != nullptr;
-}
-
 int DatabaseManager::callback(void* data, int argc, char** argv, char** azColName) {
     auto* rows = static_cast<std::vector<std::vector<std::string>>*>(data);
     std::vector<std::string> row;
@@ -37,40 +36,43 @@ int DatabaseManager::callback(void* data, int argc, char** argv, char** azColNam
         row.emplace_back(argv[i] ? argv[i] : "NULL");
     }
     rows->push_back(row);
-
     return 0;
 }
 
 bool DatabaseManager::authenticate(const std::string& username, const std::string& password,
-                                   std::string& role, int& foreign_id) const {
+                                   std::string& role, int& foreign_id) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "SELECT role, jockey_id, owner_id FROM Users WHERE username = '" + username +
                       "' AND password_hash = '" + password + "'";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-    
+
     if (rc != SQLITE_OK) {
         std::cerr << "SQL error: " << errMsg << std::endl;
         sqlite3_free(errMsg);
         return false;
     }
-    
+
     if (results.empty()) {
         return false;
     }
-    
+
     role = results[0][0];
     if (role == "jockey") {
         foreign_id = results[0][1].empty() ? -1 : std::stoi(results[0][1]);
     } else {
         foreign_id = results[0][2].empty() ? -1 : std::stoi(results[0][2]);
     }
-    
+
     return true;
 }
 
-std::vector<std::vector<std::string>> DatabaseManager::getOwnerHorsesWithRaces(const int owner_id) const {
+std::vector<std::vector<std::string>> DatabaseManager::getOwnerHorsesWithRaces(int owner_id) {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT h.name, h.age, h.experience_years, h.price, "
         "r.date, r.race_number, r.place, j.last_name "
@@ -79,15 +81,16 @@ std::vector<std::vector<std::string>> DatabaseManager::getOwnerHorsesWithRaces(c
         "LEFT JOIN Jockeys j ON r.jockey_id = j.jockey_id "
         "WHERE h.owner_id = " + std::to_string(owner_id) + " "
         "ORDER BY h.name, r.date";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
-std::vector<std::vector<std::string>> DatabaseManager::getBestHorseInfo() const {
+std::vector<std::vector<std::string>> DatabaseManager::getBestHorseInfo() {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT h.horse_id, h.name, h.age, h.experience_years, h.price, o.last_name as owner, "
         "GROUP_CONCAT(r.date || ' (' || j.last_name || ')') as races "
@@ -98,15 +101,16 @@ std::vector<std::vector<std::string>> DatabaseManager::getBestHorseInfo() const 
         "WHERE r.place = 1 "
         "GROUP BY h.horse_id "
         "ORDER BY COUNT(*) DESC LIMIT 1";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
-std::vector<std::vector<std::string>> DatabaseManager::getMostActiveJockey() const {
+std::vector<std::vector<std::string>> DatabaseManager::getMostActiveJockey() {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT j.jockey_id, j.last_name, j.experience_years, j.birth_year, j.address, "
         "COUNT(r.race_id) as total_races "
@@ -114,31 +118,33 @@ std::vector<std::vector<std::string>> DatabaseManager::getMostActiveJockey() con
         "JOIN Races r ON j.jockey_id = r.jockey_id "
         "GROUP BY j.jockey_id "
         "ORDER BY total_races DESC LIMIT 1";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
-std::vector<std::vector<std::string>> DatabaseManager::getJockeyRaces(const int jockey_id) const {
+std::vector<std::vector<std::string>> DatabaseManager::getJockeyRaces(int jockey_id) {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT r.date, r.race_number, r.place, h.name as horse_name "
         "FROM Races r "
         "JOIN Horses h ON r.horse_id = h.horse_id "
         "WHERE r.jockey_id = " + std::to_string(jockey_id) + " "
         "ORDER BY r.date DESC";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
 std::vector<std::vector<std::string>> DatabaseManager::getRacesByPeriod(const std::string& start_date,
-                                                                         const std::string& end_date) const {
+                                                                         const std::string& end_date) {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT r.date, r.race_number, r.place, h.name as horse_name, j.last_name as jockey "
         "FROM Races r "
@@ -146,17 +152,18 @@ std::vector<std::vector<std::string>> DatabaseManager::getRacesByPeriod(const st
         "JOIN Jockeys j ON r.jockey_id = j.jockey_id "
         "WHERE r.date BETWEEN '" + start_date + "' AND '" + end_date + "' "
         "ORDER BY r.date, r.race_number";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
 std::vector<std::vector<std::string>> DatabaseManager::getJockeyRacesByPeriod(int jockey_id,
                                                                                const std::string& start_date,
-                                                                               const std::string& end_date) const {
+                                                                               const std::string& end_date) {
+    if (!ensureConnection()) return {};
+
     const std::string sql =
         "SELECT r.date, r.race_number, r.place, h.name as horse_name "
         "FROM Races r "
@@ -164,24 +171,26 @@ std::vector<std::vector<std::string>> DatabaseManager::getJockeyRacesByPeriod(in
         "WHERE r.jockey_id = " + std::to_string(jockey_id) + " "
         "AND r.date BETWEEN '" + start_date + "' AND '" + end_date + "' "
         "ORDER BY r.date";
-    
+
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return results;
 }
 
-bool DatabaseManager::horseExists(const int horse_id) const {
+bool DatabaseManager::horseExists(int horse_id) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "SELECT 1 FROM Horses WHERE horse_id = " + std::to_string(horse_id);
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-
     return !results.empty();
 }
 
-bool DatabaseManager::jockeyExists(const int jockey_id) const {
+bool DatabaseManager::jockeyExists(int jockey_id) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "SELECT 1 FROM Jockeys WHERE jockey_id = " + std::to_string(jockey_id);
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
@@ -189,11 +198,13 @@ bool DatabaseManager::jockeyExists(const int jockey_id) const {
     return !results.empty();
 }
 
-bool DatabaseManager::validateHorseJockey(const int horse_id, const int jockey_id) const {
+bool DatabaseManager::validateHorseJockey(int horse_id, int jockey_id) {
     return horseExists(horse_id) && jockeyExists(jockey_id);
 }
 
-bool DatabaseManager::addRace(const Race& race) const {
+bool DatabaseManager::addRace(const Race& race) {
+    if (!ensureConnection()) return false;
+
     if (!validateHorseJockey(race.horse_id, race.jockey_id)) {
         return false;
     }
@@ -202,7 +213,7 @@ bool DatabaseManager::addRace(const Race& race) const {
                       race.date + "', " + std::to_string(race.race_number) + ", " +
                       std::to_string(race.place) + ", " + std::to_string(race.horse_id) + ", " +
                       std::to_string(race.jockey_id) + ")";
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -210,16 +221,17 @@ bool DatabaseManager::addRace(const Race& race) const {
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-bool DatabaseManager::addHorse(const Horse& horse) const {
+bool DatabaseManager::addHorse(const Horse& horse) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "INSERT INTO Horses (name, age, experience_years, price, owner_id) VALUES ('" +
                       horse.name + "', " + std::to_string(horse.age) + ", " +
                       std::to_string(horse.experience_years) + ", " + std::to_string(horse.price) + ", " +
                       std::to_string(horse.owner_id) + ")";
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -227,17 +239,18 @@ bool DatabaseManager::addHorse(const Horse& horse) const {
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-bool DatabaseManager::updateHorse(const int horse_id, const Horse& horse) const {
+bool DatabaseManager::updateHorse(int horse_id, const Horse& horse) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "UPDATE Horses SET name = '" + horse.name + "', age = " + std::to_string(horse.age) +
                       ", experience_years = " + std::to_string(horse.experience_years) +
                       ", price = " + std::to_string(horse.price) +
                       ", owner_id = " + std::to_string(horse.owner_id) +
                       " WHERE horse_id = " + std::to_string(horse_id);
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -245,13 +258,14 @@ bool DatabaseManager::updateHorse(const int horse_id, const Horse& horse) const 
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-bool DatabaseManager::deleteHorse(const int horse_id) const {
+bool DatabaseManager::deleteHorse(int horse_id) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "DELETE FROM Horses WHERE horse_id = " + std::to_string(horse_id);
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -259,17 +273,18 @@ bool DatabaseManager::deleteHorse(const int horse_id) const {
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-bool DatabaseManager::updateRace(const int race_id, const Race& race) const {
+bool DatabaseManager::updateRace(int race_id, const Race& race) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "UPDATE Races SET date = '" + race.date + "', race_number = " + std::to_string(race.race_number) +
                       ", place = " + std::to_string(race.place) +
                       ", horse_id = " + std::to_string(race.horse_id) +
                       ", jockey_id = " + std::to_string(race.jockey_id) +
                       " WHERE race_id = " + std::to_string(race_id);
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -277,13 +292,14 @@ bool DatabaseManager::updateRace(const int race_id, const Race& race) const {
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-bool DatabaseManager::deleteRace(const int race_id) const {
+bool DatabaseManager::deleteRace(int race_id) {
+    if (!ensureConnection()) return false;
+
     const std::string sql = "DELETE FROM Races WHERE race_id = " + std::to_string(race_id);
-    
+
     char* errMsg = nullptr;
     const int rc = sqlite3_exec(db, sql.c_str(), nullptr, nullptr, &errMsg);
     if (rc != SQLITE_OK) {
@@ -291,24 +307,26 @@ bool DatabaseManager::deleteRace(const int race_id) const {
         sqlite3_free(errMsg);
         return false;
     }
-
     return true;
 }
 
-int DatabaseManager::getLastRaceId() const {
+int DatabaseManager::getLastRaceId() {
+    if (!ensureConnection()) return 0;
+
     const std::string sql = "SELECT MAX(race_id) FROM Races";
     std::vector<std::vector<std::string>> results;
     char* errMsg = nullptr;
     sqlite3_exec(db, sql.c_str(), callback, &results, &errMsg);
-    
+
     if (results.empty() || results[0][0] == "NULL") {
         return 0;
     }
-
     return std::stoi(results[0][0]);
 }
 
-bool DatabaseManager::distributePrizeMoney(const double prize_fund) const {
+bool DatabaseManager::distributePrizeMoney(double prize_fund) {
+    if (!ensureConnection()) return false;
+    
     const int last_race_id = getLastRaceId();
     if (last_race_id == 0) {
         return false;
@@ -345,6 +363,5 @@ bool DatabaseManager::distributePrizeMoney(const double prize_fund) const {
                                 results[i][1] + ", " + std::to_string(prizes[i]) + ")";
         sqlite3_exec(db, insertSql.c_str(), nullptr, nullptr, &errMsg);
     }
-    
     return true;
 }
