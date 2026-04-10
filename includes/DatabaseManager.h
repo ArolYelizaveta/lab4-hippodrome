@@ -50,47 +50,56 @@ struct PrizeDistribution {
 class DatabaseManager {
     sqlite3* db;
     std::string db_path;
-    
+
     static int callback(void* data, int argc, char** argv, char** azColName);
-    
+
+    bool ensureConnection();
+
 public:
-    explicit DatabaseManager(std::string  path);
+    explicit DatabaseManager(std::string path);
     ~DatabaseManager();
-    
-    bool connect();
+
     void disconnect();
-    bool isConnected() const;
 
-    bool authenticate(const std::string& username, const std::string& password, 
-                      std::string& role, int& foreign_id) const;
+    bool authenticate(const std::string& username, const std::string& password,
+                      std::string& role, int& foreign_id);
 
-    std::vector<std::vector<std::string>> getOwnerHorsesWithRaces(int owner_id) const;
-    std::vector<std::vector<std::string>> getBestHorseInfo() const;
+    std::vector<std::vector<std::string>> getOwnerHorsesWithRaces(int owner_id);
 
-    std::vector<std::vector<std::string>> getJockeyRaces(int jockey_id) const;
-    std::vector<std::vector<std::string>> getMostActiveJockey() const;
+    std::vector<std::vector<std::string>> getBestHorseInfo();
 
-    std::vector<std::vector<std::string>> getRacesByPeriod(const std::string& start_date, 
-                                                            const std::string& end_date) const;
-    std::vector<std::vector<std::string>> getJockeyRacesByPeriod(int jockey_id, 
+    std::vector<std::vector<std::string>> getJockeyRaces(int jockey_id);
+
+    std::vector<std::vector<std::string>> getMostActiveJockey();
+
+    std::vector<std::vector<std::string>> getRacesByPeriod(const std::string& start_date,
+                                                            const std::string& end_date);
+
+    std::vector<std::vector<std::string>> getJockeyRacesByPeriod(int jockey_id,
                                                                    const std::string& start_date,
-                                                                   const std::string& end_date) const;
+                                                                   const std::string& end_date);
 
-    bool addHorse(const Horse& horse) const;
-    bool updateHorse(int horse_id, const Horse& horse) const;
-    bool deleteHorse(int horse_id) const;
-    
-    bool addRace(const Race& race) const;
-    bool updateRace(int race_id, const Race& race) const;
-    bool deleteRace(int race_id) const;
+    bool addHorse(const Horse& horse);
 
-    bool validateHorseJockey(int horse_id, int jockey_id) const;
+    bool updateHorse(int horse_id, const Horse& horse);
 
-    bool distributePrizeMoney(double prize_fund) const;
+    bool deleteHorse(int horse_id);
 
-    bool horseExists(int horse_id) const;
-    bool jockeyExists(int jockey_id) const;
-    int getLastRaceId() const;
+    bool addRace(const Race& race);
+
+    bool updateRace(int race_id, const Race& race);
+
+    bool deleteRace(int race_id);
+
+    bool validateHorseJockey(int horse_id, int jockey_id);
+
+    bool distributePrizeMoney(double prize_fund);
+
+    bool horseExists(int horse_id);
+
+    bool jockeyExists(int jockey_id);
+
+    int getLastRaceId();
 };
 
 #endif
