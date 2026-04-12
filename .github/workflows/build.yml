@@ -1,0 +1,31 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install SQLite3
+        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+
+      - name: Create directories
+        run: mkdir -p build bin
+
+      - name: Build project
+        run: make
+
+      - name: Verify build
+        run: test -f bin/hippodrome && echo "Build successful"
+
+      - name: Clean build
+        run: make clean
