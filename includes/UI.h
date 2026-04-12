@@ -34,7 +34,6 @@ class UI {
     void showMostActiveJockey();
 
     void addNewRace();
-    void distributePrize() const;
     
 public:
     UI();
