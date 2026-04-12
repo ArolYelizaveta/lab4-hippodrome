@@ -21,25 +21,6 @@ bool BusinessLogic::validateRaceData(const int horse_id, const int jockey_id, st
     return true;
 }
 
-bool BusinessLogic::distributePrizeForLastRace(const double prize_fund, std::string& result_message) const {
-    if (prize_fund <= 0) {
-        result_message = "Ошибка: Призовой фонд должен быть положительным числом!";
-        return false;
-    }
-
-    if (dbManager.distributePrizeMoney(prize_fund)) {
-        result_message = "Призовой фонд в размере " + std::to_string(prize_fund) +
-                        " руб. успешно распределён между призёрами последнего забега!\n"
-                        "1 место: 50% (" + std::to_string(prize_fund * 0.5) + " руб.)\n"
-                        "2 место: 30% (" + std::to_string(prize_fund * 0.3) + " руб.)\n"
-                        "3 место: 20% (" + std::to_string(prize_fund * 0.2) + " руб.)";
-        return true;
-    }
-
-    result_message = "Ошибка: Не удалось распределить призовые. Возможно, нет завершённых забегов.";
-    return false;
-}
-
 std::vector<std::vector<std::string>> BusinessLogic::getJockeyRacesByPeriod(const int jockey_id,
                                                                               const std::string& start_date,
                                                                               const std::string& end_date,

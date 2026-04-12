@@ -79,13 +79,11 @@ void UI::showMainMenu() {
             std::cout << "5. Обновить данные лошади\n";
             std::cout << "6. Удалить лошадь\n";
             std::cout << "7. Добавить забег\n";
-            std::cout << "8. Распределить призовые\n";
         } else {
             std::cout << "1. Мои забеги\n";
             std::cout << "2. Забеги за указанный период\n";
             std::cout << "3. Информация о самом активном жокее\n";
             std::cout << "4. Добавить забег\n";
-            std::cout << "5. Распределить призовые\n";
         }
 
         std::cout << "0. Выйти\n";
@@ -112,7 +110,6 @@ void UI::showMainMenu() {
                 case 5: updateHorseInfo(); break;
                 case 6: deleteHorse(); break;
                 case 7: addNewRace(); break;
-                case 8: distributePrize(); break;
                 case 0: isAuthenticated = false; break;
                 default: std::cout << "Неверный выбор!\n"; waitForEnter();
             }
@@ -122,7 +119,6 @@ void UI::showMainMenu() {
                 case 2: showJockeyRacesByPeriod(); break;
                 case 3: showMostActiveJockey(); break;
                 case 4: addNewRace(); break;
-                case 5: distributePrize(); break;
                 case 0: isAuthenticated = false; break;
                 default: std::cout << "Неверный выбор!\n"; waitForEnter();
             }
@@ -373,31 +369,6 @@ void UI::addNewRace() {
     } else {
         std::cout << "\n" << error << "\n";
     }
-
-    waitForEnter();
-}
-
-void UI::distributePrize() const {
-    clearScreen();
-    std::cout << "РАСПРЕДЕЛЕНИЕ ПРИЗОВОГО ФОНДА\n";
-    std::cout << "========================================\n";
-
-    double prize_fund;
-    std::cout << "Введите размер призового фонда: ";
-    std::cin >> prize_fund;
-
-    if (std::cin.fail()) {
-        std::cin.clear();
-        std::cin.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
-        std::cout << "\nОшибка: Некорректный ввод!\n";
-        waitForEnter();
-        return;
-    }
-
-    std::string result;
-
-    businessLogic.distributePrizeForLastRace(prize_fund, result);
-    std::cout << "\n" << result << "\n";
 
     waitForEnter();
 }
