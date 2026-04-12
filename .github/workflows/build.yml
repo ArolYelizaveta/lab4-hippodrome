@@ -1,4 +1,4 @@
-name: Build
+name: Build and Test
 
 on:
   push:
@@ -15,14 +15,23 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install SQLite3
-        run: sudo apt-get update && sudo apt-get install -y libsqlite3-dev
+      - name: Install SQLite3 and Google Test
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsqlite3-dev libgtest-dev
+          cd /usr/src/gtest
+          sudo cmake CMakeLists.txt
+          sudo make
+          sudo cp lib/*.a /usr/lib
 
       - name: Create directories
-        run: mkdir -p build bin
+        run: mkdir -p build bin test_build
 
       - name: Build project
         run: make
+
+      - name: Build and run tests
+        run: make test
 
       - name: Verify build
         run: test -f bin/hippodrome && echo "Build successful"
